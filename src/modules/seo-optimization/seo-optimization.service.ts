@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { EnvironmentConfig } from '../../config/environment.config';
+import { SEOProviderFactory } from './providers/seo-provider.factory';
+import { ISEOProvider } from './interfaces/seo-provider.interface';
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
@@ -22,25 +24,31 @@ interface SEOAnalysis {
   readabilityScore: number;
   keywordDensity: number;
   headingStructure: boolean;
+  externalData?: any;
 }
 
 @Injectable()
 export class SeoOptimizationService {
   private readonly logger = new Logger(SeoOptimizationService.name);
+  private readonly seoProvider: ISEOProvider;
 
   constructor(
     private readonly httpService: HttpService,
     private readonly envConfig: EnvironmentConfig,
-  ) {}
+    private readonly seoProviderFactory: SEOProviderFactory,
+  ) {
+    this.seoProvider = this.seoProviderFactory.create();
+    this.logger.log(`Using SEO provider: ${this.envConfig.seoTool}`);
+  }
 
   /**
    * Analyze content and provide SEO recommendations
    */
-  analyzeContent(
+  async analyzeContent(
     content: string,
     keyword: string,
     _title: string,
-  ): SEOAnalysis {
+  ): Promise<SEOAnalysis> {
     this.logger.log(`Analyzing SEO for keyword: ${keyword}`);
 
     const analysis: SEOAnalysis = {
@@ -52,23 +60,47 @@ export class SeoOptimizationService {
       headingStructure: false,
     };
 
-    // Check keyword density (target: 1-2%)
-    analysis.keywordDensity = this.calculateKeywordDensity(content, keyword);
+    try {
+      // Get external SEO data from provider
+      const externalAnalysis = await this.seoProvider.analyzeContent(
+        content,
+        keyword,
+      );
+      analysis.externalData = externalAnalysis;
 
-    // Check readability (Flesch-Kincaid)
-    analysis.readabilityScore = this.calculateReadabilityScore(content);
+      // Internal analysis
+      analysis.keywordDensity = this.calculateKeywordDensity(content, keyword);
+      analysis.readabilityScore = this.calculateReadabilityScore(content);
+      analysis.headingStructure = this.checkHeadingStructure(content);
 
-    // Check heading structure
-    analysis.headingStructure = this.checkHeadingStructure(content);
+      // Merge recommendations
+      analysis.recommendations = [
+        ...externalAnalysis.recommendations,
+        ...this.generateRecommendations(analysis, content),
+      ];
 
-    // Generate recommendations
-    analysis.recommendations = this.generateRecommendations(analysis, content);
+      // Calculate overall score
+      analysis.score = this.calculateSEOScore(analysis);
 
-    // Calculate overall SEO score
-    analysis.score = this.calculateSEOScore(analysis);
+      this.logger.log(`SEO analysis complete. Score: ${analysis.score}/100`);
+      return analysis;
+    } catch (error) {
+      this.logger.warn(
+        `External SEO provider failed, using internal analysis only`,
+      );
 
-    this.logger.log(`SEO analysis complete. Score: ${analysis.score}/100`);
-    return analysis;
+      // Fallback to internal analysis only
+      analysis.keywordDensity = this.calculateKeywordDensity(content, keyword);
+      analysis.readabilityScore = this.calculateReadabilityScore(content);
+      analysis.headingStructure = this.checkHeadingStructure(content);
+      analysis.recommendations = this.generateRecommendations(
+        analysis,
+        content,
+      );
+      analysis.score = this.calculateSEOScore(analysis);
+
+      return analysis;
+    }
   }
 
   /**

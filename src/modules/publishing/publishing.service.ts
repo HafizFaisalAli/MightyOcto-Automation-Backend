@@ -2,8 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { EnvironmentConfig } from '../../config/environment.config';
 import { ERPNextService } from '../erpnext/erpnext.service';
-
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+import {
+  PublishBlogDto,
+  PublishLinkedInDto,
+  PublishFacebookDto,
+  PublishInstagramDto,
+  PublishResponseDto,
+} from './dto/publishing.dto';
 
 /**
  * Publishing Service
@@ -29,83 +34,203 @@ export class PublishingService {
   /**
    * Publish blog post to Framer CMS
    */
-  async publishToBlog(
-    title: string,
-    content: string,
-    metadata: any,
-  ): Promise<void> {
-    this.logger.log(`Publishing to blog: ${title}`);
+  publishToBlog(dto: PublishBlogDto): Promise<PublishResponseDto> {
+    this.logger.log(`Publishing to Framer CMS: ${dto.title}`);
 
-    // TODO: Implement Framer CMS API integration
+    try {
+      // TODO: Implement real Framer CMS API call
+      // const response = await firstValueFrom(
+      //   this.httpService.post(
+      //     `${this.envConfig.framerBaseUrl}/cms/collections/blog-posts`,
+      //     {
+      //       title: dto.title,
+      //       content: dto.content,
+      //       slug: dto.slug,
+      //       author: dto.author,
+      //       tags: dto.tags,
+      //       featured_image: dto.featured_image,
+      //       meta_description: dto.meta_description,
+      //     },
+      //     {
+      //       headers: {
+      //         'Authorization': `Bearer ${this.envConfig.framerApiKey}`,
+      //         'Content-Type': 'application/json',
+      //       },
+      //     },
+      //   ),
+      // );
 
-    // Update status in ERPNext
-    await this.updatePublishStatus(
-      (metadata.id as string) || '',
-      'blog',
-      'published',
-    );
+      // Mock response
+      const mockPostId = `blog-${Date.now()}`;
+      const mockUrl = `${this.envConfig.framerBaseUrl}/blog/${dto.slug || 'post'}`;
+
+      // Update ERPNext
+      this.updatePublishStatus('blog', mockPostId, 'published', mockUrl);
+
+      return Promise.resolve({
+        success: true,
+        platform: 'framer',
+        postId: mockPostId,
+        postUrl: mockUrl,
+        message: 'Blog post published successfully (MOCK)',
+        publishedAt: new Date(),
+      });
+    } catch (error) {
+      this.logger.error(`Failed to publish blog: ${(error as Error).message}`);
+      throw error;
+    }
   }
 
   /**
    * Publish to LinkedIn company page
    */
-  async publishToLinkedIn(content: string, metadata: any): Promise<void> {
-    this.logger.log(`Publishing to LinkedIn`);
+  publishToLinkedIn(dto: PublishLinkedInDto): Promise<PublishResponseDto> {
+    this.logger.log(`Publishing to LinkedIn: ${dto.text.substring(0, 50)}...`);
 
-    // TODO: Implement LinkedIn API integration
+    try {
+      // TODO: Implement real LinkedIn API call
+      // const response = await firstValueFrom(
+      //   this.httpService.post(
+      //     'https://api.linkedin.com/v2/ugcPosts',
+      //     {
+      //       author: `urn:li:organization:${this.envConfig.linkedinBusinessAccountId}`,
+      //       lifecycleState: 'PUBLISHED',
+      //       specificContent: {
+      //         'com.linkedin.ugc.ShareContent': {
+      //           shareCommentary: { text: dto.text },
+      //           shareMediaCategory: 'NONE',
+      //         },
+      //       },
+      //       visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': dto.visibility || 'PUBLIC' },
+      //     },
+      //     {
+      //       headers: {
+      //         'Authorization': `Bearer ${this.envConfig.linkedinClientSecret}`,
+      //         'Content-Type': 'application/json',
+      //       },
+      //     },
+      //   ),
+      // );
 
-    await this.updatePublishStatus(
-      (metadata.id as string) || '',
-      'linkedin',
-      'published',
-    );
+      const mockPostId = `li-${Date.now()}`;
+      const mockUrl = `https://linkedin.com/feed/update/${mockPostId}`;
+
+      this.updatePublishStatus('linkedin', mockPostId, 'published', mockUrl);
+
+      return Promise.resolve({
+        success: true,
+        platform: 'linkedin',
+        postId: mockPostId,
+        postUrl: mockUrl,
+        message: 'LinkedIn post published successfully (MOCK)',
+        publishedAt: new Date(),
+      });
+    } catch (error) {
+      this.logger.error(`LinkedIn publish failed: ${(error as Error).message}`);
+      throw error;
+    }
   }
 
   /**
    * Publish to Facebook page
    */
-  async publishToFacebook(content: string, metadata: any): Promise<void> {
-    this.logger.log(`Publishing to Facebook`);
-
-    // TODO: Implement Facebook API integration
-
-    await this.updatePublishStatus(
-      (metadata.id as string) || '',
-      'facebook',
-      'published',
+  publishToFacebook(dto: PublishFacebookDto): Promise<PublishResponseDto> {
+    this.logger.log(
+      `Publishing to Facebook: ${dto.message.substring(0, 50)}...`,
     );
+
+    try {
+      // TODO: Implement real Facebook Graph API call
+      // const response = await firstValueFrom(
+      //   this.httpService.post(
+      //     `https://graph.facebook.com/v18.0/${this.envConfig.facebookPageId}/feed`,
+      //     {
+      //       message: dto.message,
+      //       link: dto.link,
+      //       access_token: this.envConfig.facebookPageToken,
+      //     },
+      //   ),
+      // );
+
+      const mockPostId = `fb-${Date.now()}`;
+      const mockUrl = `https://facebook.com/${this.envConfig.facebookPageId}/posts/${mockPostId}`;
+
+      this.updatePublishStatus('facebook', mockPostId, 'published', mockUrl);
+
+      return Promise.resolve({
+        success: true,
+        platform: 'facebook',
+        postId: mockPostId,
+        postUrl: mockUrl,
+        message: 'Facebook post published successfully (MOCK)',
+        publishedAt: new Date(),
+      });
+    } catch (error) {
+      this.logger.error(`Facebook publish failed: ${(error as Error).message}`);
+      throw error;
+    }
   }
 
   /**
    * Publish to Instagram business account
    */
-  async publishToInstagram(
-    content: string,
-    imageUrl: string,
-    metadata: any,
-  ): Promise<void> {
-    this.logger.log(`Publishing to Instagram`);
-
-    // TODO: Implement Instagram API integration
-
-    await this.updatePublishStatus(
-      (metadata.id as string) || '',
-      'instagram',
-      'published',
+  publishToInstagram(dto: PublishInstagramDto): Promise<PublishResponseDto> {
+    this.logger.log(
+      `Publishing to Instagram: ${dto.caption.substring(0, 50)}...`,
     );
+
+    try {
+      // TODO: Implement real Instagram Graph API call (2-step process)
+      // Step 1: Create media container
+      // Step 2: Publish container
+
+      const mockPostId = `ig-${Date.now()}`;
+      const mockUrl = `https://instagram.com/p/${mockPostId}`;
+
+      this.updatePublishStatus('instagram', mockPostId, 'published', mockUrl);
+
+      return Promise.resolve({
+        success: true,
+        platform: 'instagram',
+        postId: mockPostId,
+        postUrl: mockUrl,
+        message: 'Instagram post published successfully (MOCK)',
+        publishedAt: new Date(),
+      });
+    } catch (error) {
+      this.logger.error(
+        `Instagram publish failed: ${(error as Error).message}`,
+      );
+      throw error;
+    }
   }
 
   /**
    * Update publish status in ERPNext
+   * @remarks Currently a no-op mock; will implement when ERPNext credentials available
    */
-  private async updatePublishStatus(
-    docId: string,
+  private updatePublishStatus(
     platform: string,
-    status: string,
-  ): Promise<void> {
-    await this.erpnextService.updateDocument('Blog Post', docId, {
-      [`${platform}_status`]: status,
-      [`${platform}_published_at`]: new Date().toISOString(),
-    });
+    postId: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _status?: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _url?: string,
+  ): void {
+    try {
+      // This would update the Blog Post or Social Post DocType in ERPNext
+      this.logger.log(
+        `Updating ${platform} publish status in ERPNext: ${postId}`,
+      );
+      // TODO: Implement real ERPNext update when CRUD is ready
+      // await this.erpnextService.updateDocument('Blog Post', postId, {
+      //   [`${platform}_status`]: _status,
+      //   [`${platform}_post_id`]: postId,
+      //   [`${platform}_url`]: _url,
+      //   [`${platform}_published_at`]: new Date().toISOString(),
+      // });
+    } catch (error) {
+      this.logger.warn(`Failed to update ERPNext: ${(error as Error).message}`);
+    }
   }
 }

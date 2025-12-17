@@ -43,9 +43,9 @@ export class EnvironmentConfig {
     );
   }
 
-  // SEO Tool Configuration
+  // SEO Tool Configuration (Phase 3: SERPAPI only)
   get seoTool(): string {
-    return this.configService.get<string>('SEO_TOOL', 'semrush');
+    return this.configService.get<string>('SEO_TOOL', 'serpapi');
   }
 
   get semrushApiKey(): string | undefined {

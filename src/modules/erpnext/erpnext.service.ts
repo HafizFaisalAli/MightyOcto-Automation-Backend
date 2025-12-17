@@ -28,9 +28,25 @@ export class ERPNextService {
   ) {}
 
   /**
+   * Ensure ERPNext credentials are configured
+   */
+  private ensureConfigured(): void {
+    if (!this.envConfig.erpnextBaseUrl) {
+      throw new Error('ERPNEXT_BASE_URL is not configured');
+    }
+    if (!this.envConfig.erpnextApiKey) {
+      throw new Error('ERPNEXT_API_KEY is not configured');
+    }
+    if (!this.envConfig.erpnextApiSecret) {
+      throw new Error('ERPNEXT_API_SECRET is not configured');
+    }
+  }
+
+  /**
    * Create a new document in ERPNext
    */
   async createDocument(doctype: string, data: any): Promise<any> {
+    this.ensureConfigured();
     const url = `${this.envConfig.erpnextBaseUrl}/api/resource/${doctype}`;
 
     const response = await firstValueFrom(
@@ -53,6 +69,7 @@ export class ERPNextService {
     docname: string,
     data: any,
   ): Promise<any> {
+    this.ensureConfigured();
     const url = `${this.envConfig.erpnextBaseUrl}/api/resource/${doctype}/${docname}`;
 
     const response = await firstValueFrom(
@@ -69,6 +86,7 @@ export class ERPNextService {
    * Get document from ERPNext
    */
   async getDocument(doctype: string, docname: string): Promise<any> {
+    this.ensureConfigured();
     const url = `${this.envConfig.erpnextBaseUrl}/api/resource/${doctype}/${docname}`;
 
     const response = await firstValueFrom(
@@ -88,6 +106,7 @@ export class ERPNextService {
     filters?: any,
     fields?: string[],
   ): Promise<any[]> {
+    this.ensureConfigured();
     const url = `${this.envConfig.erpnextBaseUrl}/api/resource/${doctype}`;
 
     const params: Record<string, string> = {};
