@@ -1,7 +1,7 @@
 import { Controller, Get, Query, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CmsFeedService } from './cms-feed.service';
-import { CmsFragmentsDto } from './dto/cms-feed.dto';
+import { CmsFragmentsDto, BlogPostFeedItem } from './dto/cms-feed.dto';
 
 /**
  * CMS Feed Controller
@@ -25,7 +25,7 @@ export class CmsFeedController {
   @ApiOperation({
     summary: 'Get blog posts for AnySync/Framer CMS integration',
     description:
-      'Returns published and draft blog posts in JSON format. Compatible with AnySync Framer plugin.',
+      'Returns published and draft blog posts in JSON format. Compatible with AnySync Framer plugin. Use flat=true for direct array response.',
   })
   @ApiQuery({
     name: 'limit',
@@ -38,6 +38,12 @@ export class CmsFeedController {
     required: false,
     type: Number,
     description: 'Pagination offset (default: 0)',
+  })
+  @ApiQuery({
+    name: 'flat',
+    required: false,
+    type: Boolean,
+    description: 'Return flat array without wrapper (for AnySync compatibility)',
   })
   @ApiResponse({
     status: 200,
@@ -72,15 +78,27 @@ export class CmsFeedController {
   async getCmsFeed(
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
-  ): Promise<CmsFragmentsDto> {
+    @Query('flat') flat?: string,
+  ): Promise<CmsFragmentsDto | BlogPostFeedItem[]> {
     const parsedLimit = limit ? parseInt(limit, 10) : 50;
     const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    const isFlat = flat === 'true';
 
     this.logger.log(
-      `CMS feed requested: limit=${parsedLimit}, offset=${parsedOffset}`,
+      `CMS feed requested: limit=${parsedLimit}, offset=${parsedOffset}, flat=${isFlat}`,
     );
 
-    return this.cmsFeedService.getBlogPostsFeed(parsedLimit, parsedOffset);
+    const feed = await this.cmsFeedService.getBlogPostsFeed(
+      parsedLimit,
+      parsedOffset,
+    );
+
+    // Return flat array for AnySync compatibility
+    if (isFlat) {
+      return feed.posts;
+    }
+
+    return feed;
   }
 
   /**
