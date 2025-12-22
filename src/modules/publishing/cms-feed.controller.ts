@@ -43,7 +43,8 @@ export class CmsFeedController {
     name: 'flat',
     required: false,
     type: Boolean,
-    description: 'Return flat array without wrapper (for AnySync compatibility)',
+    description:
+      'Return flat array without wrapper (for AnySync compatibility)',
   })
   @ApiResponse({
     status: 200,
