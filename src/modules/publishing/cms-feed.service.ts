@@ -114,6 +114,25 @@ export class CmsFeedService {
         updated_at: new Date().toISOString(),
         platform: 'blog',
       },
+      {
+        id: 'post-004',
+        title: 'Faisal Ali The Growth Marketer',
+        slug: '4-faisal-ali-growth-marketer',
+        content:
+          'Email remains the highest ROI channel. Learn the psychology and mechanics of sequences that work.',
+        excerpt: 'Build email sequences that drive revenue.',
+        featured_image: 'https://example.com/image3.jpg',
+        keywords: 'email marketing, automation, conversions',
+        status: 'draft',
+        seo_score: 72,
+        engagement_score: 0,
+        published_at: undefined,
+        created_at: new Date(
+          Date.now() - 2 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        updated_at: new Date().toISOString(),
+        platform: 'blog',
+      },
     ];
 
     return {
