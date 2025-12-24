@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiHeader, ApiResponse } from '@nestjs/swagger';
 import { ERPNextService } from '../erpnext/erpnext.service';
 import { WebhookSignatureService } from './services/webhook-signature.service';
 import { FramerFormSubmissionDto, WebhookResponseDto } from './dto/webhook.dto';
+import { PerformanceAnalyticsService } from '../analytics/performance-analytics.service';
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
@@ -25,6 +26,7 @@ export class WebhookController {
   constructor(
     private readonly erpnextService: ERPNextService,
     private readonly signatureService: WebhookSignatureService,
+    private readonly analyticsService: PerformanceAnalyticsService,
   ) {}
 
   /**
@@ -87,6 +89,51 @@ export class WebhookController {
     } catch (error) {
       this.logger.error(
         `Webhook processing failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Analytics webhook for tracking engagement
+   */
+  @Post('analytics')
+  @ApiOperation({ summary: 'Track post engagement metrics' })
+  @ApiResponse({ status: 200, description: 'Engagement tracked' })
+  async handleAnalytics(
+    @Body()
+    payload: {
+      postId: string;
+      metrics: {
+        views?: number;
+        clicks?: number;
+        shares?: number;
+        comments?: number;
+        conversionRate?: number;
+      };
+    },
+    @Headers('x-webhook-signature') signature?: string,
+    @Headers('x-webhook-timestamp') timestamp?: string,
+  ): Promise<WebhookResponseDto> {
+    this.logger.log(`Received analytics webhook for ${payload.postId}`);
+
+    try {
+      if (signature) {
+        this.signatureService.verify(payload, signature, timestamp);
+      }
+
+      await this.analyticsService.trackEngagement(
+        payload.postId,
+        payload.metrics || {},
+      );
+
+      return { status: 'success', message: 'Engagement tracked' };
+    } catch (error) {
+      this.logger.error(
+        `Analytics webhook failed: ${error instanceof Error ? error.message : String(error)}`,
       );
       return {
         status: 'error',

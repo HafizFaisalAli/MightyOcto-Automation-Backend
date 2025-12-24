@@ -25,15 +25,14 @@ export class CmsFeedService {
       // Try to fetch from ERPNext if credentials available
       const posts = await this.fetchFromERPNext(limit, offset);
 
-      if (posts.length > 0) {
-        return {
-          posts: posts.map((p) => this.transformToFeedItem(p)),
-          total: posts.length,
-          limit,
-          offset,
-          last_sync: new Date().toISOString(),
-        };
-      }
+      // Return ERPNext data even if empty (prevents falling back to mock when ERPNext is reachable)
+      return {
+        posts: posts.map((p) => this.transformToFeedItem(p)),
+        total: posts.length,
+        limit,
+        offset,
+        last_sync: new Date().toISOString(),
+      };
     } catch (error) {
       this.logger.warn(
         `ERPNext fetch failed: ${(error as Error).message}, using mock data`,

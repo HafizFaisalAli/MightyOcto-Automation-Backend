@@ -73,6 +73,10 @@ export class EnvironmentConfig {
     return this.configService.get<string>('LINKEDIN_BUSINESS_ACCOUNT_ID');
   }
 
+  get linkedinAccessToken(): string | undefined {
+    return this.configService.get<string>('LINKEDIN_ACCESS_TOKEN');
+  }
+
   get facebookPageToken(): string | undefined {
     return this.configService.get<string>('FACEBOOK_PAGE_ACCESS_TOKEN');
   }

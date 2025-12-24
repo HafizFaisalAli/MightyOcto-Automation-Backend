@@ -1,5 +1,8 @@
+import { promises as fs } from 'fs';
+import { join } from 'path';
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 import { EnvironmentConfig } from '../../config/environment.config';
 import { ERPNextService } from '../erpnext/erpnext.service';
 import {
@@ -34,140 +37,274 @@ export class PublishingService {
   /**
    * Publish blog post to Framer CMS
    */
-  publishToBlog(dto: PublishBlogDto): Promise<PublishResponseDto> {
+  async publishToBlog(dto: PublishBlogDto): Promise<PublishResponseDto> {
     this.logger.log(`Publishing to Framer CMS: ${dto.title}`);
 
-    try {
-      // TODO: Implement real Framer CMS API call
-      // const response = await firstValueFrom(
-      //   this.httpService.post(
-      //     `${this.envConfig.framerBaseUrl}/cms/collections/blog-posts`,
-      //     {
-      //       title: dto.title,
-      //       content: dto.content,
-      //       slug: dto.slug,
-      //       author: dto.author,
-      //       tags: dto.tags,
-      //       featured_image: dto.featured_image,
-      //       meta_description: dto.meta_description,
-      //     },
-      //     {
-      //       headers: {
-      //         'Authorization': `Bearer ${this.envConfig.framerApiKey}`,
-      //         'Content-Type': 'application/json',
-      //       },
-      //     },
-      //   ),
-      // );
+    const baseUrl = this.envConfig.framerBaseUrl;
+    const apiKey = this.envConfig.framerApiKey;
 
-      // Mock response
+    // If Framer API credentials are not available, fall back to mock (AnySync recommended)
+    if (!baseUrl || !apiKey) {
+      this.logger.warn(
+        'Framer API credentials missing — falling back to mock response',
+      );
       const mockPostId = `blog-${Date.now()}`;
-      const mockUrl = `${this.envConfig.framerBaseUrl}/blog/${dto.slug || 'post'}`;
-
-      // Update ERPNext
+      const mockUrl = `${baseUrl || 'https://framer.site'}/blog/${dto.slug || 'post'}`;
       this.updatePublishStatus('blog', mockPostId, 'published', mockUrl);
-
-      return Promise.resolve({
+      return {
         success: true,
         platform: 'framer',
         postId: mockPostId,
         postUrl: mockUrl,
-        message: 'Blog post published successfully (MOCK)',
+        message:
+          'Blog post published successfully (MOCK). Use AnySync for production Framer sync.',
         publishedAt: new Date(),
-      });
+      };
+    }
+
+    try {
+      const payload = {
+        title: dto.title,
+        content: dto.content,
+        slug: dto.slug,
+        author: dto.author,
+        tags: dto.tags,
+        featured_image: dto.featured_image,
+        meta_description: dto.meta_description,
+      };
+
+      // Attempt to POST to Framer CMS endpoint (best-effort; Framer may require marketplace plugin)
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${baseUrl}/cms/collections/blog-posts`,
+          payload,
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const postId = String(response.data?.id || `blog-${Date.now()}`);
+
+      // Build post URL from Framer base and slug/id (avoid reading arbitrary response shape)
+      const postUrl = `${baseUrl}/blog/${dto.slug || postId}`;
+
+      this.updatePublishStatus('blog', String(postId), 'published', postUrl);
+
+      return {
+        success: true,
+        platform: 'framer',
+        postId: String(postId),
+        postUrl,
+        message: 'Blog post published successfully',
+        publishedAt: new Date(),
+      };
     } catch (error) {
       this.logger.error(`Failed to publish blog: ${(error as Error).message}`);
-      throw error;
+      // Fallback to mock on error
+      const mockPostId = `blog-${Date.now()}`;
+      const mockUrl = `${baseUrl}/blog/${dto.slug || 'post'}`;
+      this.updatePublishStatus('blog', mockPostId, 'failed', mockUrl);
+      return {
+        success: false,
+        platform: 'framer',
+        postId: mockPostId,
+        postUrl: mockUrl,
+        message: `Failed to publish to Framer: ${(error as Error).message}`,
+        publishedAt: new Date(),
+      };
     }
   }
 
   /**
    * Publish to LinkedIn company page
    */
-  publishToLinkedIn(dto: PublishLinkedInDto): Promise<PublishResponseDto> {
+  async publishToLinkedIn(
+    dto: PublishLinkedInDto,
+  ): Promise<PublishResponseDto> {
     this.logger.log(`Publishing to LinkedIn: ${dto.text.substring(0, 50)}...`);
 
-    try {
-      // TODO: Implement real LinkedIn API call
-      // const response = await firstValueFrom(
-      //   this.httpService.post(
-      //     'https://api.linkedin.com/v2/ugcPosts',
-      //     {
-      //       author: `urn:li:organization:${this.envConfig.linkedinBusinessAccountId}`,
-      //       lifecycleState: 'PUBLISHED',
-      //       specificContent: {
-      //         'com.linkedin.ugc.ShareContent': {
-      //           shareCommentary: { text: dto.text },
-      //           shareMediaCategory: 'NONE',
-      //         },
-      //       },
-      //       visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': dto.visibility || 'PUBLIC' },
-      //     },
-      //     {
-      //       headers: {
-      //         'Authorization': `Bearer ${this.envConfig.linkedinClientSecret}`,
-      //         'Content-Type': 'application/json',
-      //       },
-      //     },
-      //   ),
-      // );
+    let token =
+      this.envConfig.linkedinAccessToken || this.envConfig.linkedinClientSecret;
 
+    // Try to read persisted token file if env token not provided
+    if (!token) {
+      try {
+        const content = await fs.readFile(
+          join(process.cwd(), 'linkedin_token.json'),
+          {
+            encoding: 'utf8',
+          },
+        );
+        const stored = JSON.parse(content) as Record<string, any> | null;
+        if (stored && stored.access_token) {
+          token = String(stored.access_token);
+        }
+      } catch {
+        // ignore - no token file present
+      }
+    }
+    const orgId = this.envConfig.linkedinBusinessAccountId;
+
+    if (!token || !orgId) {
+      this.logger.warn(
+        'LinkedIn credentials missing — falling back to mock response',
+      );
       const mockPostId = `li-${Date.now()}`;
       const mockUrl = `https://linkedin.com/feed/update/${mockPostId}`;
-
       this.updatePublishStatus('linkedin', mockPostId, 'published', mockUrl);
-
-      return Promise.resolve({
+      return {
         success: true,
         platform: 'linkedin',
         postId: mockPostId,
         postUrl: mockUrl,
         message: 'LinkedIn post published successfully (MOCK)',
         publishedAt: new Date(),
-      });
+      };
+    }
+
+    try {
+      const payload = {
+        author: `urn:li:organization:${orgId}`,
+        lifecycleState: 'PUBLISHED',
+        specificContent: {
+          'com.linkedin.ugc.ShareContent': {
+            shareCommentary: { text: dto.text },
+            shareMediaCategory: 'NONE',
+          },
+        },
+        visibility: {
+          'com.linkedin.ugc.MemberNetworkVisibility':
+            dto.visibility || 'PUBLIC',
+        },
+      };
+
+      const response = await firstValueFrom(
+        this.httpService.post('https://api.linkedin.com/v2/ugcPosts', payload, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'X-Restli-Protocol-Version': '2.0.0',
+          },
+        }),
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const postId = response.data && (response.data.id || `li-${Date.now()}`);
+      const postUrl = `https://linkedin.com/feed/update/${postId}`;
+      this.updatePublishStatus(
+        'linkedin',
+        String(postId),
+        'published',
+        postUrl,
+      );
+
+      return {
+        success: true,
+        platform: 'linkedin',
+        postId: String(postId),
+        postUrl,
+        message: 'LinkedIn post published successfully',
+        publishedAt: new Date(),
+      };
     } catch (error) {
       this.logger.error(`LinkedIn publish failed: ${(error as Error).message}`);
-      throw error;
+      // Fallback to mock response on error
+      const mockPostId = `li-${Date.now()}`;
+      const mockUrl = `https://linkedin.com/feed/update/${mockPostId}`;
+      this.updatePublishStatus('linkedin', mockPostId, 'failed', mockUrl);
+      return {
+        success: false,
+        platform: 'linkedin',
+        postId: mockPostId,
+        postUrl: mockUrl,
+        message: `LinkedIn publish failed: ${(error as Error).message}`,
+        publishedAt: new Date(),
+      };
     }
   }
 
   /**
    * Publish to Facebook page
    */
-  publishToFacebook(dto: PublishFacebookDto): Promise<PublishResponseDto> {
+  async publishToFacebook(
+    dto: PublishFacebookDto,
+  ): Promise<PublishResponseDto> {
     this.logger.log(
       `Publishing to Facebook: ${dto.message.substring(0, 50)}...`,
     );
 
-    try {
-      // TODO: Implement real Facebook Graph API call
-      // const response = await firstValueFrom(
-      //   this.httpService.post(
-      //     `https://graph.facebook.com/v18.0/${this.envConfig.facebookPageId}/feed`,
-      //     {
-      //       message: dto.message,
-      //       link: dto.link,
-      //       access_token: this.envConfig.facebookPageToken,
-      //     },
-      //   ),
-      // );
+    const token = this.envConfig.facebookPageToken;
+    const pageId = this.envConfig.facebookPageId;
 
+    if (!token || !pageId) {
+      this.logger.warn(
+        'Facebook credentials missing — falling back to mock response',
+      );
       const mockPostId = `fb-${Date.now()}`;
-      const mockUrl = `https://facebook.com/${this.envConfig.facebookPageId}/posts/${mockPostId}`;
-
+      const mockUrl = `https://facebook.com/${pageId || 'page'}/posts/${mockPostId}`;
       this.updatePublishStatus('facebook', mockPostId, 'published', mockUrl);
-
-      return Promise.resolve({
+      return {
         success: true,
         platform: 'facebook',
         postId: mockPostId,
         postUrl: mockUrl,
         message: 'Facebook post published successfully (MOCK)',
         publishedAt: new Date(),
-      });
+      };
+    }
+
+    try {
+      const payload: Record<string, unknown> = { message: dto.message };
+      if (dto.link) payload['link'] = dto.link;
+      if (dto.scheduledPublishTime)
+        payload['scheduled_publish_time'] = dto.scheduledPublishTime;
+
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `https://graph.facebook.com/v18.0/${pageId}/feed`,
+          payload,
+          {
+            params: { access_token: token },
+          },
+        ),
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const postId = response.data && (response.data.id || `fb-${Date.now()}`);
+      const postUrl = `https://facebook.com/${pageId}/posts/${postId}`;
+      this.updatePublishStatus(
+        'facebook',
+        String(postId),
+        'published',
+        postUrl,
+      );
+
+      return {
+        success: true,
+        platform: 'facebook',
+        postId: String(postId),
+        postUrl,
+        message: 'Facebook post published successfully',
+        publishedAt: new Date(),
+      };
     } catch (error) {
       this.logger.error(`Facebook publish failed: ${(error as Error).message}`);
-      throw error;
+      const mockPostId = `fb-${Date.now()}`;
+      const mockUrl = `https://facebook.com/${pageId}/posts/${mockPostId}`;
+      this.updatePublishStatus('facebook', mockPostId, 'failed', mockUrl);
+      return {
+        success: false,
+        platform: 'facebook',
+        postId: mockPostId,
+        postUrl: mockUrl,
+        message: `Facebook publish failed: ${(error as Error).message}`,
+        publishedAt: new Date(),
+      };
     }
   }
 

@@ -58,7 +58,6 @@ export class AppController {
     const status = {
       required: {
         SERPAPI_API_KEY: !!this.envConfig.serpapiApiKey,
-        FRAMER_API_KEY: !!this.envConfig.framerApiKey,
         FRAMER_BASE_URL: !!this.envConfig.framerBaseUrl,
         INSTAGRAM_BUSINESS_ACCOUNT_ID:
           !!this.envConfig.instagramBusinessAccountId,
@@ -79,7 +78,6 @@ export class AppController {
 
     const missing = [
       !status.required.SERPAPI_API_KEY && 'SERPAPI_API_KEY',
-      !status.required.FRAMER_API_KEY && 'FRAMER_API_KEY',
       !status.required.FRAMER_BASE_URL && 'FRAMER_BASE_URL',
       !status.required.INSTAGRAM_BUSINESS_ACCOUNT_ID &&
         'INSTAGRAM_BUSINESS_ACCOUNT_ID',
